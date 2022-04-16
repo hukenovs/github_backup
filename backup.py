@@ -98,7 +98,7 @@ class GithubSaver:
 
         save_path = f"{self._user_login}_{destination}.json"
         with open(save_path, "w") as f:
-            json.dump(repo_dict, f)
+            json.dump(repo_dict, f, indent=2, ensure_ascii=True)
 
     def save_stargazers(self):
         """Save all stargazers"""
