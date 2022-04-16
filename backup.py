@@ -1,22 +1,4 @@
-r"""GitHub Backup Repos
-
-GitHub saver for stargazers, forks, repos.
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -u USER_LOGIN, --user_login USER_LOGIN
-                        User login
-  -t USER_TOKEN, --user_token USER_TOKEN
-                        User access token
-  --user_forks          Save forked repos by user
-  -v, --verbose         Logging level=debug
-  --forks               Save list of forks
-  --stars               Save list of stargazers
-  --repos               Save repos to `save_path`
-  --clone               Can clone repos to `save_path`
-  -p SAVE_PATH, --save_path SAVE_PATH
-                        Save path to your repos
-
+r"""GitHub saver for stargazers, forks, repos. Can clone all user repos.
 """
 
 import os
@@ -108,15 +90,20 @@ class GithubSaver:
         """Save all forks"""
         self.__save_list(destination="forks")
 
-    def save_repos(self, save_path: str = "."):
+    def save_repos(self, save_path: str = ".", force: bool = False):
         """Save all repos"""
 
         for repo_url in self.repositories:
             repo_name = os.path.basename(repo_url)
             repo_resp = requests.get(url=os.path.join(repo_url, "zipball"))
             if repo_resp.status_code == 200:
-                with open(os.path.join(save_path, f"{repo_name}.zip"), 'wb') as ff:
-                    ff.write(repo_resp.content)
+                repo_path = os.path.join(save_path, f"{repo_name}.zip")
+                if force or not os.path.isfile(repo_path):
+                    with open(repo_path, 'wb') as ff:
+                        ff.write(repo_resp.content)
+                else:
+                    logger.info(f"Repo {repo_resp} is already saved!")
+
             else:
                 logger.warning(f"Cannot download repo {repo_resp}")
 
@@ -181,11 +168,12 @@ def __parser_github():
     parser.add_argument("-t", "--user_token", type=str, default=None, help=f"User access token")
     parser.add_argument("--user_forks", action="store_true", help=f"Save forked repos by user")
     parser.add_argument("-v", "--verbose", action="store_true", help=f"Logging level=debug")
+    parser.add_argument("-f", "--force", action="store_true", help=f"Force save")
 
     parser.add_argument("--forks", action="store_true", help=f"Save list of forks")
     parser.add_argument("--stars", action="store_true", help=f"Save list of stargazers")
     groups = parser.add_mutually_exclusive_group()
-    parser.add_argument("--repos", action="store_true", help=f"Save repos to `save_path`")
+    groups.add_argument("--repos", action="store_true", help=f"Save repos to `save_path`")
     groups.add_argument("--clone", action="store_true", help=f"Clone repos to `save_path`")
     parser.add_argument("-p", "--save_path", type=str, default=".", help=f"Save path to your repos")
 
@@ -210,7 +198,7 @@ def __parser_github():
     if args.forks:
         github_saver.save_forks()
     if args.repos:
-        github_saver.save_repos(save_path=args.save_path)
+        github_saver.save_repos(save_path=args.save_path, force=args.force)
     if args.clone:
         github_saver.clone_repos(clone_path=args.save_path)
 

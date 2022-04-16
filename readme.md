@@ -1,17 +1,17 @@
 ## GitHub backup repositories
-Save your repos and list of stargazers & list of forks for them.
+Save your repos and list of stargazers & list of forks for them. Pure python3 with no dependencies to install.
 
-| **Title**     | GitHub Backup       |
-|:---|:--------------------|
-| **Author**    | Alexander Kapitanov |
-| **Sources**   | Python              |
-| **Contact**   | `<hidden>`          |
-| **Release**   | 16 Apr 2022         |
-| **License**   | MIT                 |
+| **Title**   | GitHub Backup       |
+|:------------|:--------------------|
+| **Author**  | Alexander Kapitanov |
+| **Sources** | Python              |
+| **Contact** | `<hidden>`          |
+| **Release** | 16 Apr 2022         |
+| **License** | MIT                 |
 
 ### Command line arguments
 ```bash
-usage: backup.py [-h] -u USER_LOGIN [-t USER_TOKEN] [--user_forks] [-v] [--forks] [--stars] [--repos] [--clone] [-p SAVE_PATH]
+usage: backup.py [-h] -u USER_LOGIN [-t USER_TOKEN] [--user_forks] [-v] [-f] [--forks] [--stars] [--repos | --clone] [-p SAVE_PATH]
 
 GitHub saver for stargazers, forks, repos.
 
@@ -23,6 +23,7 @@ optional arguments:
                         User access token
   --user_forks          Save forked repos by user
   -v, --verbose         Logging level=debug
+  -f, --force           Force download and save repo
   --forks               Save list of forks
   --stars               Save list of stargazers
   --repos               Save repos to `save_path`
