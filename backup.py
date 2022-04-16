@@ -39,24 +39,33 @@ class GithubSaver:
     }
 
     def __init__(self, user_login: str, user_token: Optional[str] = None, user_forks: bool = False):
-        self.user_login = user_login
-        self.user_forks = user_forks
-        if user_token:
+        self._user_login = user_login
+        self._user_forks = user_forks
+        self.__user_token = user_token
+        if user_token is not None:
             self.HEADERS.update({"Authorization": user_token})
 
     def __repositories(self, clone_url: bool = False) -> list:
-        response = self.__response(self.API_URL, stage=f"users/{self.user_login}/repos")
+        response = self.__response(self.API_URL, stage=f"users/{self._user_login}/repos")
         if response.status_code == 200:
             repos = []
             for repo in response.json():
-                if not self.user_forks and repo['fork']:
+                if not self._user_forks and repo['fork']:
                     continue
 
                 url_path = repo['clone_url'] if clone_url else repo['url']
                 repos.append(url_path)
             return repos
         else:
-            raise Exception(f"Cannot get list of repos from {self.user_login}")
+            raise Exception(f"Cannot get list of repos from {self._user_login}")
+
+    @property
+    def user_login(self):
+        return self._user_login
+
+    @user_login.setter
+    def user_login(self, value: str):
+        self._user_login = value
 
     @cached_property
     def repositories(self) -> list:
@@ -87,7 +96,7 @@ class GithubSaver:
             if result := method(repo_url):
                 repo_dict[repo_name] = result
 
-        save_path = f"{self.user_login}_{destination}.json"
+        save_path = f"{self._user_login}_{destination}.json"
         with open(save_path, "w") as f:
             json.dump(repo_dict, f)
 
@@ -113,10 +122,15 @@ class GithubSaver:
 
     def clone_repos(self, clone_path: str = "."):
         """Save all repos"""
-        for repo_url in self.clone_links[:2]:
+        for repo_url in self.clone_links:
+            logger.info(f"Clone {repo_url}")
             repo_name, _ = os.path.splitext(os.path.basename(repo_url))
+            repo_path = os.path.join(clone_path, repo_name)
+
+            if self.__user_token:
+                repo_url = repo_url.replace("github.com", f"{self._user_login}:{self.__user_token}@github.com")
+
             try:
-                repo_path = os.path.join(clone_path, repo_name)
                 os.system(f"git clone {repo_url} {repo_path}")
             except SystemError:
                 logger.warning(f"Cannot clone {repo_url}")

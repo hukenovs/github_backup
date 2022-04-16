@@ -11,7 +11,7 @@ Save your repos and list of stargazers & list of forks for them.
 
 ### Command line arguments
 ```bash
-usage: backup.py [-h] [-u USER_LOGIN] [-t USER_TOKEN] [--user_forks] [-v] [-f] [-s] [-r] [-p SAVE_PATH]
+usage: backup.py [-h] -u USER_LOGIN [-t USER_TOKEN] [--user_forks] [-v] [--forks] [--stars] [--repos] [--clone] [-p SAVE_PATH]
 
 GitHub saver for stargazers, forks, repos.
 
@@ -33,13 +33,13 @@ optional arguments:
 ```
 
 #### Save list of stargazers to `{user_login}_stargazers.json`: 
-`python backup.py -u USER -t TOKEN -s`
+`python backup.py -u USER -t TOKEN --stars`
 
 #### Save list of forks to `{user_login}_forks.json`
-`python backup.py -u USER -t TOKEN -f `
+`python backup.py -u USER -t TOKEN --forks `
 
 #### Download repos to `save_path`
-`python backup.py -u USER -t TOKEN -r -p ~/backup`
+`python backup.py -u USER -t TOKEN --repos -p ~/backups`
 
-#### Run all
-`python backup.py -u USER -t TOKEN -s -f -r`
+#### Clone repos to `save_path`
+`python backup.py -u USER -t TOKEN --clone -p ~/backups`
