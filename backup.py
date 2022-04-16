@@ -193,11 +193,14 @@ def __parser_github():
     parser.add_argument("--recursive", action="store_true", help="Recursive submodules")
     parser.add_argument("--starred", action="store_true", help="Get repositories starred by user")
     parser.add_argument("-p", "--save_path", type=str, default=".", help="Save path to your repos")
+    parser.add_argument("-l", "--repo_list", nargs="+", help="List of repos to clone or to save")
+    # TODO: Implement repo list for saving custom repositories from input arguments.
 
     args, _ = parser.parse_known_args()
 
     for kk, vv in vars(args).items():
-        print(f"{kk :<20}: {vv}")
+        if vv:
+            print(f"{kk :<20}: {vv}")
 
     logging.basicConfig(
         format=u'[LINE:%(lineno)d] %(levelname)-8s [%(asctime)s]  %(message)s',
@@ -220,7 +223,7 @@ def __parser_github():
         github_saver.save_repos(
             save_path=args.save_path,
             force=args.force,
-            starred=args.starred
+            starred=args.starred,
         )
 
     if args.clone:
@@ -228,7 +231,7 @@ def __parser_github():
             clone_path=args.save_path,
             bare=args.bare,
             recursive=args.recursive,
-            starred=args.starred
+            starred=args.starred,
         )
 
 
