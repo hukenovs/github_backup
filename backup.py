@@ -13,7 +13,7 @@ from functools import cached_property
 logger = logging.getLogger(__name__)
 
 
-class GithubSaver:
+class GitHubSaver:
     API_URL = "https://api.github.com/"
     HEADERS = {
         "Accept": "application/vnd.github.v3+json",
@@ -27,8 +27,8 @@ class GithubSaver:
         if user_token is not None:
             self.HEADERS.update({"Authorization": user_token})
 
-    def __repositories(self, clone_url: bool = False) -> list:
-        response = self.__response(self.API_URL, stage=f"users/{self._user_login}/repos")
+    def __repositories(self, clone_url: bool = False, stage: str = "repos") -> list:
+        response = self.__response(self.API_URL, stage=f"users/{self._user_login}/{stage}")
         if response.status_code == 200:
             repos = []
             for repo in response.json():
@@ -50,12 +50,20 @@ class GithubSaver:
         self._user_login = value
 
     @cached_property
-    def repositories(self) -> list:
+    def user_repositories(self) -> list:
         return self.__repositories()
 
     @cached_property
-    def clone_links(self) -> list:
+    def user_starred(self):
+        return self.__repositories(stage="starred")
+
+    @cached_property
+    def user_clone_links(self) -> list:
         return self.__repositories(clone_url=True)
+
+    @cached_property
+    def user_starred_links(self):
+        return self.__repositories(clone_url=True, stage="starred")
 
     def __response(self, url: str, stage: str = "") -> requests.Response:
         return requests.get(
@@ -73,7 +81,7 @@ class GithubSaver:
             raise NotImplemented(f"IMplement method for {destination}")
 
         repo_dict = {}
-        for repo_url in self.repositories:
+        for repo_url in self.user_repositories:
             repo_name = os.path.basename(repo_url)
             if result := method(repo_url):
                 repo_dict[repo_name] = result
@@ -90,14 +98,17 @@ class GithubSaver:
         """Save all forks"""
         self.__save_list(destination="forks")
 
-    def save_repos(self, save_path: str = ".", force: bool = False):
+    def save_repos(self, save_path: str = ".", force: bool = False, starred: bool = False):
         """Save all repos"""
+        repositories = self.user_starred if starred else self.user_repositories
 
-        for repo_url in self.repositories:
+        for repo_url in repositories:
             repo_name = os.path.basename(repo_url)
             repo_resp = requests.get(url=os.path.join(repo_url, "zipball"))
             if repo_resp.status_code == 200:
                 repo_path = os.path.join(save_path, f"{repo_name}.zip")
+                logger.info(f"Save {repo_url} to {repo_path}")
+
                 if force or not os.path.isfile(repo_path):
                     with open(repo_path, 'wb') as ff:
                         ff.write(repo_resp.content)
@@ -107,18 +118,21 @@ class GithubSaver:
             else:
                 logger.warning(f"Cannot download repo {repo_resp}")
 
-    def clone_repos(self, clone_path: str = "."):
+    def clone_repos(self, clone_path: str = ".", bare: bool = False, recursive: bool = False, starred: bool = False):
         """Save all repos"""
-        for repo_url in self.clone_links:
-            logger.info(f"Clone {repo_url}")
+        repositories = self.user_starred_links if starred else self.user_clone_links
+
+        for repo_url in repositories:
             repo_name, _ = os.path.splitext(os.path.basename(repo_url))
             repo_path = os.path.join(clone_path, repo_name)
+            logger.info(f"Clone {repo_url} to {repo_path}")
 
             if self.__user_token:
                 repo_url = repo_url.replace("github.com", f"{self._user_login}:{self.__user_token}@github.com")
 
+            command = f"git clone {repo_url} {repo_path}" + " --bare" * bare + " --recursive" * recursive
             try:
-                os.system(f"git clone {repo_url} {repo_path}")
+                os.system(command)
             except SystemError:
                 logger.warning(f"Cannot clone {repo_url}")
 
@@ -164,18 +178,21 @@ class GithubSaver:
 def __parser_github():
     parser = argparse.ArgumentParser(description="GitHub saver for stargazers, forks, repos.")
 
-    parser.add_argument("-u", "--user_login", type=str, required=True, help=f"User login")
-    parser.add_argument("-t", "--user_token", type=str, default=None, help=f"User access token")
-    parser.add_argument("--user_forks", action="store_true", help=f"Save forked repos by user")
-    parser.add_argument("-v", "--verbose", action="store_true", help=f"Logging level=debug")
-    parser.add_argument("-f", "--force", action="store_true", help=f"Force save")
+    parser.add_argument("-u", "--user_login", type=str, required=True, help="User login")
+    parser.add_argument("-t", "--user_token", type=str, default=None, help="User access token")
+    parser.add_argument("--user_forks", action="store_true", help="Save forked repos by user")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Logging level=debug")
+    parser.add_argument("-f", "--force", action="store_true", help="Force save")
 
-    parser.add_argument("--forks", action="store_true", help=f"Save list of forks")
-    parser.add_argument("--stars", action="store_true", help=f"Save list of stargazers")
+    parser.add_argument("--forks", action="store_true", help="Save list of forks")
+    parser.add_argument("--stars", action="store_true", help="Save list of stargazers")
     groups = parser.add_mutually_exclusive_group()
-    groups.add_argument("--repos", action="store_true", help=f"Save repos to `save_path`")
+    groups.add_argument("--save", action="store_true", help="Save repos to `save_path`")
     groups.add_argument("--clone", action="store_true", help=f"Clone repos to `save_path`")
-    parser.add_argument("-p", "--save_path", type=str, default=".", help=f"Save path to your repos")
+    parser.add_argument("--bare", action="store_true", help="Clone a bare git repo")
+    parser.add_argument("--recursive", action="store_true", help="Recursive submodules")
+    parser.add_argument("--starred", action="store_true", help="Get repositories starred by user")
+    parser.add_argument("-p", "--save_path", type=str, default=".", help="Save path to your repos")
 
     args, _ = parser.parse_known_args()
 
@@ -187,7 +204,7 @@ def __parser_github():
         level=logging.DEBUG if args.verbose else logging.INFO
     )
 
-    github_saver = GithubSaver(
+    github_saver = GitHubSaver(
         user_login=args.user_login,
         user_token=args.user_token,
         user_forks=args.user_forks,
@@ -195,12 +212,24 @@ def __parser_github():
 
     if args.stars:
         github_saver.save_stargazers()
+
     if args.forks:
         github_saver.save_forks()
-    if args.repos:
-        github_saver.save_repos(save_path=args.save_path, force=args.force)
+
+    if args.save:
+        github_saver.save_repos(
+            save_path=args.save_path,
+            force=args.force,
+            starred=args.starred
+        )
+
     if args.clone:
-        github_saver.clone_repos(clone_path=args.save_path)
+        github_saver.clone_repos(
+            clone_path=args.save_path,
+            bare=args.bare,
+            recursive=args.recursive,
+            starred=args.starred
+        )
 
 
 if __name__ == '__main__':
