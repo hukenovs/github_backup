@@ -14,6 +14,20 @@ logger = logging.getLogger(__name__)
 
 
 class GitHubSaver:
+    """GitHub Saver (download or clone user repos or starred repos, save stargazers and list of forks)
+
+    Parameters
+    ----------
+    user_login: str
+        GitHub user login
+
+    user_token: Optional[str]
+        GitHub user access token. May be left.
+
+    user_forks: bool
+        Save forked repos by user. Default: False.
+
+    """
     API_URL = "https://api.github.com/"
     HEADERS = {
         "Accept": "application/vnd.github.v3+json",
@@ -27,20 +41,6 @@ class GitHubSaver:
         if user_token is not None:
             self.HEADERS.update({"Authorization": user_token})
 
-    def __repositories(self, clone_url: bool = False, stage: str = "repos") -> list:
-        response = self.__response(self.API_URL, stage=f"users/{self._user_login}/{stage}")
-        if response.status_code == 200:
-            repos = []
-            for repo in response.json():
-                if not self._user_forks and repo['fork']:
-                    continue
-
-                url_path = repo['clone_url'] if clone_url else repo['url']
-                repos.append(url_path)
-            return repos
-        else:
-            raise Exception(f"Cannot get list of repos from {self._user_login}")
-
     @property
     def user_login(self):
         return self._user_login
@@ -49,39 +49,68 @@ class GitHubSaver:
     def user_login(self, value: str):
         self._user_login = value
 
-    @cached_property
-    def user_repositories(self) -> list:
-        return self.__repositories()
-
-    @cached_property
-    def user_starred(self):
-        return self.__repositories(stage="starred")
-
-    @cached_property
-    def user_clone_links(self) -> list:
-        return self.__repositories(clone_url=True)
-
-    @cached_property
-    def user_starred_links(self):
-        return self.__repositories(clone_url=True, stage="starred")
-
     def __response(self, url: str, stage: str = "") -> requests.Response:
         return requests.get(
             url=os.path.join(url, stage),
             headers=self.HEADERS
         )
 
+    def __api_request(self, stage: str) -> dict:
+        response = self.__response(self.API_URL, stage=f"users/{self._user_login}/{stage}")
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Cannot get list of repos from {self._user_login}")
+
+    @cached_property
+    def _repositories(self) -> dict:
+        return self.__api_request(stage='repos')
+
+    @cached_property
+    def _starred_list(self) -> dict:
+        return self.__api_request(stage='starred')
+
+    def _remote_request(self, content: dict, clone_url: bool = False) -> list:
+        repos = []
+        for repo in content:
+            if not self._user_forks and repo['fork']:
+                continue
+
+            url_path = repo['clone_url'] if clone_url else repo['url']
+            repos.append(url_path)
+        return repos
+
+    @cached_property
+    def owner_repositories(self) -> list:
+        """List of user repositories"""
+        return self._remote_request(content=self._repositories)
+
+    @cached_property
+    def owner_clone_links(self) -> list:
+        """List of user repositories in clone link format"""
+        return self._remote_request(content=self._repositories, clone_url=True)
+
+    @cached_property
+    def user_starred_list(self):
+        """List of repos starred by user"""
+        return self._remote_request(content=self._starred_list)
+
+    @cached_property
+    def user_starred_links(self):
+        """List of links to repos starred by user"""
+        return self._remote_request(content=self._starred_list, clone_url=True)
+
     def __save_list(self, destination: str):
-        """Save list"""
+        """Save list to json"""
         if destination == "stargazers":
             method = self.get_stargazers
         elif destination == "forks":
             method = self.get_forks
         else:
-            raise NotImplemented(f"IMplement method for {destination}")
+            raise NotImplemented(f"Implement method for {destination}")
 
         repo_dict = {}
-        for repo_url in self.user_repositories:
+        for repo_url in self.owner_repositories:
             repo_name = os.path.basename(repo_url)
             if result := method(repo_url):
                 repo_dict[repo_name] = result
@@ -100,7 +129,7 @@ class GitHubSaver:
 
     def save_repos(self, save_path: str = ".", force: bool = False, starred: bool = False):
         """Save all repos"""
-        repositories = self.user_starred if starred else self.user_repositories
+        repositories = self.user_starred_list if starred else self.owner_repositories
 
         for repo_url in repositories:
             repo_name = os.path.basename(repo_url)
@@ -120,7 +149,7 @@ class GitHubSaver:
 
     def clone_repos(self, clone_path: str = ".", bare: bool = False, recursive: bool = False, starred: bool = False):
         """Save all repos"""
-        repositories = self.user_starred_links if starred else self.user_clone_links
+        repositories = self.user_starred_links if starred else self.owner_clone_links
 
         for repo_url in repositories:
             repo_name, _ = os.path.splitext(os.path.basename(repo_url))
