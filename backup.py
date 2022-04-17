@@ -49,36 +49,13 @@ class GitHubSaver:
     def user_login(self, value: str):
         self._user_login = value
 
-    def __response(self, url: str, stage: str = "") -> requests.Response:
-        return requests.get(
-            url=os.path.join(url, stage),
-            headers=self.HEADERS
-        )
-
-    def __api_request(self, stage: str) -> dict:
-        response = self.__response(self.API_URL, stage=f"users/{self._user_login}/{stage}")
-        if response.status_code == 200:
-            return response.json()
-        else:
-            raise Exception(f"Cannot get list of repos from {self._user_login}")
-
     @cached_property
-    def _repositories(self) -> dict:
+    def _repositories(self) -> list:
         return self.__api_request(stage='repos')
 
     @cached_property
-    def _starred_list(self) -> dict:
+    def _starred_list(self) -> list:
         return self.__api_request(stage='starred')
-
-    def _remote_request(self, content: dict, clone_url: bool = False) -> list:
-        repos = []
-        for repo in content:
-            if not self._user_forks and repo['fork']:
-                continue
-
-            url_path = repo['clone_url'] if clone_url else repo['url']
-            repos.append(url_path)
-        return repos
 
     @cached_property
     def owner_repositories(self) -> list:
@@ -100,12 +77,37 @@ class GitHubSaver:
         """List of links to repos starred by user"""
         return self._remote_request(content=self._starred_list, clone_url=True)
 
+    def __response(self, url: str, stage: str = "") -> list:
+        response = requests.get(url=os.path.join(url, stage), headers=self.HEADERS)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            logger.warning(f"Cannot get response from {url}")
+
+    def __api_request(self, stage: str) -> list:
+        response = self.__response(self.API_URL, stage=f"users/{self._user_login}/{stage}")
+        if not response:
+            raise Exception(f"Cannot get response for {self._user_login}, {stage}")
+        return response
+
+    def _remote_request(self, content: list, clone_url: bool = False) -> list:
+        repos = []
+        for repo in content:
+            if not self._user_forks and repo['fork']:
+                continue
+
+            url_path = repo['clone_url'] if clone_url else repo['url']
+            repos.append(url_path)
+        return repos
+
     def __save_list(self, destination: str):
         """Save list to json"""
         if destination == "stargazers":
             method = self.get_stargazers
         elif destination == "forks":
             method = self.get_forks
+        elif destination == "issues":
+            method = self.get_issues
         else:
             raise NotImplemented(f"Implement method for {destination}")
 
@@ -126,6 +128,10 @@ class GitHubSaver:
     def save_forks(self):
         """Save all forks"""
         self.__save_list(destination="forks")
+
+    def save_issues(self):
+        """Save all issues"""
+        self.__save_list(destination="issues")
 
     def save_repos(self, save_path: str = ".", force: bool = False, starred: bool = False):
         """Save all repos"""
@@ -167,11 +173,9 @@ class GitHubSaver:
 
     def get_stargazers(self, url: str) -> list:
         """Get all stargazers"""
-
-        response = self.__response(url, "stargazers")
-        if response.status_code == 200:
-            star_list = []
-            for gazer in response.json():
+        star_list = []
+        if response := self.__response(url, "stargazers"):
+            for gazer in response:
                 star_list.append(
                     {
                         'login': gazer['login'],
@@ -180,17 +184,13 @@ class GitHubSaver:
                     }
                 )
             logger.info(f"Get stargazers for {url}")
-            return star_list
-        else:
-            logger.warning(f"Cannot get stargazers for {url}")
+        return star_list
 
     def get_forks(self, url: str) -> list:
         """Get all forks"""
-
-        response = self.__response(url, "forks")
-        if response.status_code == 200:
-            fork_list = []
-            for fork in response.json():
+        fork_list = []
+        if response := self.__response(url, "forks"):
+            for fork in response:
                 fork_list.append(
                     {
                         'login': fork['owner']['login'],
@@ -199,9 +199,12 @@ class GitHubSaver:
                     }
                 )
             logger.info(f"Get forks for {url}")
-            return fork_list
-        else:
-            logger.warning(f"Cannot get forks for {url}")
+        return fork_list
+
+    def get_issues(self, url: str) -> list:
+        """Get all issues"""
+        logger.info(f"Get issues for {url}")
+        return self.__response(url, "issues")
 
 
 def __parser_github():
@@ -215,6 +218,7 @@ def __parser_github():
 
     parser.add_argument("--forks", action="store_true", help="Save list of forks")
     parser.add_argument("--stars", action="store_true", help="Save list of stargazers")
+    parser.add_argument("--issues", action="store_true", help="Save list of issues")
     groups = parser.add_mutually_exclusive_group()
     groups.add_argument("--save", action="store_true", help="Save repos to `save_path`")
     groups.add_argument("--clone", action="store_true", help=f"Clone repos to `save_path`")
@@ -247,6 +251,9 @@ def __parser_github():
 
     if args.forks:
         github_saver.save_forks()
+
+    if args.issues:
+        github_saver.save_issues()
 
     if args.save:
         github_saver.save_repos(
