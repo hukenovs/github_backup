@@ -5,7 +5,7 @@ Save your repos and list of stargazers & list of forks for them. Pure python3 an
 
 | **Title**   | GitHub Backup       |
 |:------------|:--------------------|
-| **Author**  | Alexander Kapitanov |
+| **Author**  | [Alexander Kapitanov](https://habr.com/ru/users/hukenovs/) |
 | **Sources** | Python3             |
 | **Contact** | `<hidden>`          |
 | **Release** | 16 Apr 2022         |
